@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Opening in your browser…</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f4f6fb; color: #111827; }
+    main { width: min(100%, 440px); background: white; border: 1px solid #e5e7eb; border-radius: 24px; padding: 30px 24px; text-align: center; box-shadow: 0 18px 60px rgba(17,24,39,.08); }
+    .mark { width: 58px; height: 58px; margin: 0 auto 18px; display: grid; place-items: center; border-radius: 18px; background: #111827; color: white; font-size: 26px; font-weight: 800; }
+    h1 { margin: 0 0 10px; font-size: 25px; letter-spacing: -.5px; }
+    p { color: #4b5563; line-height: 1.55; margin: 10px 0; }
+    .status { margin: 18px 0; padding: 12px; background: #f9fafb; border-radius: 12px; color: #374151; font-size: 14px; }
+    a.button, button.button { display: block; width: 100%; padding: 14px 16px; border: 0; border-radius: 12px; background: #111827; color: white; text-decoration: none; font: inherit; font-weight: 700; cursor: pointer; }
+    a.secondary { display: block; margin-top: 12px; color: #374151; font-size: 14px; }
+    details { text-align: left; margin-top: 22px; border-top: 1px solid #e5e7eb; padding-top: 16px; }
+    summary { cursor: pointer; font-weight: 650; font-size: 14px; }
+    ol { color: #4b5563; line-height: 1.6; padding-left: 22px; font-size: 14px; }
+    .small { font-size: 12px; color: #6b7280; margin-top: 18px; }
+    #error { color: #b91c1c; font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="mark">↗</div>
+  <h1>Opening your link</h1>
+  <p>We're trying to open this page in your external browser.</p>
+  <div class="status" id="status" role="status" aria-live="polite">Checking your device…</div>
+  <a class="button" id="openButton" href="#" rel="noopener">Continue to website</a>
+  <a class="secondary" id="retryButton" href="#">Try opening in browser again</a>
+  <p id="error" hidden></p>
+  <details>
+    <summary>If it didn't open automatically</summary>
+    <ol id="instructions">
+      <li>Tap the menu (⋯) in Instagram's browser.</li>
+      <li>Choose <b>Open in external browser</b> or <b>Open in Chrome/Safari</b>, if available.</li>
+    </ol>
+  </details>
+  <p class="small">Your browser and Instagram may block automatic opening. Use Continue if nothing happens.</p>
+</main>
+<script>
+(() => {
+  "use strict";
+
+  // SECURITY: Set this to the website domain(s) you control before deployment.
+  // Example: const ALLOWED_HOSTS = ["yourstore.com", "www.yourstore.com"];
+  // Do not leave "*" or accept arbitrary domains on a public redirect service.
+  const ALLOWED_HOSTS = ["example.com", "www.example.com"];
+
+  const params = new URLSearchParams(location.search);
+  const raw = params.get("url") || "https://example.com/";
+  let destination;
+
+  try {
+    destination = new URL(raw);
+    if (!["https:", "http:"].includes(destination.protocol)) throw new Error("Only HTTP/HTTPS links are supported.");
+    if (ALLOWED_HOSTS.length && !ALLOWED_HOSTS.includes(destination.hostname.toLowerCase())) {
+      throw new Error("This destination domain is not on the allowed list. Update ALLOWED_HOSTS in index.html.");
+    }
+  } catch (e) {
+    document.getElementById("status").textContent = "The destination link needs configuration.";
+    document.getElementById("error").hidden = false;
+    document.getElementById("error").textContent = e.message || "Invalid destination URL.";
+    document.getElementById("openButton").hidden = true;
+    document.getElementById("retryButton").hidden = true;
+    return;
+  }
+
+  const ua = navigator.userAgent || "";
+  const isInstagram = /Instagram/i.test(ua);
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const status = document.getElementById("status");
+  const openButton = document.getElementById("openButton");
+  const retryButton = document.getElementById("retryButton");
+  const instructions = document.getElementById("instructions");
+
+  // Safe normal fallback: the actual destination is always available by a visible link.
+  openButton.href = destination.href;
+  retryButton.href = "#";
+  retryButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    attemptExternalOpen(true);
+  });
+
+  if (!isInstagram) {
+    status.textContent = "Your destination is ready.";
+    openButton.textContent = "Open website";
+    retryButton.hidden = true;
+    instructions.innerHTML = "<li>Tap <b>Open website</b> to continue.</li>";
+    return;
+  }
+
+  status.textContent = "Trying to open your external browser…";
+  if (isIOS) {
+    instructions.innerHTML =
+      "<li>If Safari does not open, tap the menu (⋯) in Instagram.</li>" +
+      "<li>Choose <b>Open in external browser</b>, if shown.</li>";
+  } else if (isAndroid) {
+    instructions.innerHTML =
+      "<li>If Chrome does not open, tap <b>Continue to website</b>.</li>" +
+      "<li>If needed, use Instagram's menu and choose <b>Open in Chrome</b> or the external-browser option.</li>";
+  }
+
+  let attempted = false;
+  function attemptExternalOpen(fromTap) {
+    if (attempted && !fromTap) return;
+    attempted = true;
+
+    if (isIOS) {
+      // Undocumented Instagram URL scheme. May stop working at any time.
+      const scheme = "instagram://extbrowser/?url=" + encodeURIComponent(destination.href);
+      status.textContent = "If Instagram permits it, Safari should open. Otherwise use Continue.";
+      location.href = scheme;
+      return;
+    }
+
+    if (isAndroid) {
+      // Chrome's public intent syntax. Automatic launches may be blocked without a user gesture.
+      const u = destination;
+      const path = u.host + u.pathname + u.search + u.hash;
+      const fallback = encodeURIComponent(destination.href);
+      const intent = "intent://" + path +
+        "#Intent;scheme=" + u.protocol.slice(0, -1) +
+        ";action=android.intent.action.VIEW;package=com.android.chrome;" +
+        "S.browser_fallback_url=" + fallback + ";end";
+      if (fromTap) location.href = intent;
+      else {
+        // Attempt once on load, but leave the visible button as a reliable fallback.
+        location.href = intent;
+      }
+      return;
+    }
+
+    status.textContent = "Tap Continue to open your website.";
+  }
+
+  // Try automatic handoff. This is best-effort only and can be blocked by the host app/OS.
+  window.setTimeout(() => attemptExternalOpen(false), 450);
+  openButton.addEventListener("click", (event) => {
+    if (isIOS || isAndroid) {
+      event.preventDefault();
+      attemptExternalOpen(true);
+      // If the handoff is blocked, the visitor can tap the button again or use the menu.
+      status.textContent = "If no browser opened, tap Continue again or use Instagram's browser menu.";
+      openButton.href = destination.href;
+      openButton.textContent = "Continue to website";
+    }
+  });
+})();
+</script>
+</body>
+</html>
